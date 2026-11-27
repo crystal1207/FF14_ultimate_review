@@ -239,3 +239,8 @@ dialog td:first-child { color: var(--accent); white-space: nowrap; }
 .gcd-summary { color: var(--muted); }
 .gcd-summary.warn { color: #ff9b8a; }
 .gcd-input { width: 64px; text-align: right; }
+.range-hint { margin: 0; color: var(--muted); line-height: 1.5; }
+.range-hint b { color: var(--text); font-weight: 600; }
+.range-hint a { color: var(--accent); }
+.cal-row.flash { animation: calflash 1.6s ease-out; border-radius: 6px; }
+@keyframes calflash { 0%, 40% { background: color-mix(in srgb, var(--accent) 30%, transparent); } 100% { background: transparent; } }

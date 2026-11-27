@@ -31,6 +31,7 @@
       </div>
       <div class="pulls-filter">
         <label class="small"><input type="checkbox" id="rangeOnly" checked> 只看影片時段內的場次</label>
+        <p id="rangeHint" class="range-hint small" hidden></p>
         <select id="daySel" title="還沒校正時，依日期篩選（凌晨 6 點前算前一天）"></select>
         <select id="zoneSel" title="只看這個副本"></select>
       </div>
@@ -76,7 +77,7 @@
             <span class="step">日期</span>
             <span>影片開始於</span>
             <select id="calDateSel" title="畫面時鐘只有時間沒有日期，程式會選影片時段內場次最多的那一天；配錯天請在這裡改"></select>
-            <span class="muted small">畫面時鐘沒有日期，如果配錯天請在這裡改</span>
+            <span class="muted small">畫面時鐘只有時間沒有日期，程式會自動選影片時段內場次最多的那天。如果左邊的場次和影片對不上，請在這裡選正確的日期。</span>
           </div>
           <div class="cal-row">
             <span class="step">最準</span>
@@ -99,7 +100,7 @@
             <span class="step">微調</span>
             <span>自動校正後如果還差一點，用時間軸上方的「時間軸偏移」手動調整（快捷鍵 <kbd>[</kbd> <kbd>]</kbd> 每次 0.1 秒，加 Shift 每次 1 秒）。</span>
           </div>
-          <p class="muted small">每部影片校正一次就會記住。還沒校正時，請先在左邊選日期、點一把這部影片裡打的場次，再用上面任一方法校正（程式用選取的那一把判斷是哪一天）。校正後，上方的「本機」時間會跟畫面右上角的時鐘一致，時鐘跳分鐘時這裡應該剛好是 :00。</p>
+          <p class="muted small">每部影片校正一次就會記住。畫面時鐘沒有日期，程式會自動選影片時段內場次最多的那天；配錯天請用最上面的「日期」選單修改。校正後，上方的「本機」時間會跟畫面右上角的時鐘一致，時鐘跳分鐘時這裡應該剛好是 :00。</p>
         </div>
       </details>
 

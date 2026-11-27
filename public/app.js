@@ -399,8 +399,13 @@ function setOffset(sec) {
 const DAY_MS = 86_400_000;
 function fillCalDate() {
   const row = $('calDateRow');
-  if (!state.cal || !state.report) { row.hidden = true; return; }
+  const hint = $('rangeHint');
+  if (!state.cal || !state.report) { row.hidden = true; hint.hidden = true; return; }
   row.hidden = false;
+  // 左邊列表上方的提示：目前對到哪一天，配錯天可以點過去改
+  const s0 = new Date(videoToWall(0));
+  hint.hidden = false;
+  hint.innerHTML = `影片日期：<b>${s0.getMonth() + 1}/${s0.getDate()} ${fmtClock(s0.getTime()).slice(0, 5)} 開始</b><br>場次對不上？<a href="#" id="fixDateLink">點這裡手動改日期</a>`;
   const len = state.videoLen || 0;
   const opts = [];
   for (let k = -2; k <= 2; k++) {
@@ -983,6 +988,15 @@ $('offsetInput').addEventListener('change', (e) => {
 });
 $('offsetReset').addEventListener('click', () => setOffset(0));
 $('calDateSel').addEventListener('change', () => shiftCalDays(Number($('calDateSel').value)));
+$('rangeHint').addEventListener('click', (e) => {
+  if (e.target.id !== 'fixDateLink') return;
+  e.preventDefault();
+  $('calPanel').open = true;
+  $('calDateRow').classList.add('flash');
+  setTimeout(() => $('calDateRow').classList.remove('flash'), 1600);
+  $('calDateRow').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  $('calDateSel').focus();
+});
 
 function jumpEvent(dir) {
   if (!state.events.length) return;
