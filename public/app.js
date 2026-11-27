@@ -666,7 +666,7 @@ const AWARDS = [
   { key: 'most', icon: '⚰️', title: '地板常客', desc: '死最多次' },
   { key: 'first', icon: '🚩', title: '開路先鋒', desc: '最常是該把第一個倒下的人' },
   { key: 'wall', icon: '⚡', title: '電網之友', desc: '走出（或被擊退出）場地邊界，撞到電網', list: true },
-  { key: 'buster', icon: '⚖️', title: 'BOSS給予死刑', desc: '不是坦克，卻吃到死刑（只該打坦克的強力單體攻擊）被打死', list: true },
+  { key: 'buster', icon: '⚖️', title: '把你加入減傷軸', desc: '不是坦克，卻吃到死刑（只該打坦克的強力單體攻擊）被打死', list: true },
   { key: 'oneshot', icon: '🔪', title: '一刀入魂', desc: '滿血（90% 以上）被一招直接打死', list: true },
   { key: 'vuln', icon: '🎯', title: '易傷收藏家', desc: '身上帶著受傷加重（易傷）還硬吃，被打死', list: true },
   { key: 'doom', icon: '💀', title: '死神的約定', desc: '死亡宣告時間到', list: true },
