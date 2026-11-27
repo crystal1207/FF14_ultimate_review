@@ -72,6 +72,12 @@
       <details id="calPanel" class="cal">
         <summary>時間校正 <span id="calStatus" class="cal-status">尚未校正</span></summary>
         <div class="cal-body">
+          <div class="cal-row" id="calDateRow" hidden>
+            <span class="step">日期</span>
+            <span>影片開始於</span>
+            <select id="calDateSel" title="畫面時鐘只有時間沒有日期，程式會選影片時段內場次最多的那一天；配錯天請在這裡改"></select>
+            <span class="muted small">畫面時鐘沒有日期，如果配錯天請在這裡改</span>
+          </div>
           <div class="cal-row">
             <span class="step">最準</span>
             <span>讀取畫面右上角的時鐘，自動找出跳分鐘的那一格（需要同意分享這個分頁，建議先把影片畫質調到 1080p）：</span>

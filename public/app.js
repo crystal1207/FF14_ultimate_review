@@ -140,20 +140,30 @@ const fightDay = (f) => dayKey(state.report.startTime + f.startTime);
 
 // 「21:47」或「21:47:03」→ 最接近參考時段的那一天的本機時間。
 // 參考時段：已校正就用影片時段；否則用選取的這一把（或列表中的場次）的時間
-function resolveClock(text) {
+// atVideo：畫面上顯示這個時間時的影片秒數。還沒校正時，畫面時鐘只有時間沒有日期，
+// 所以把前後幾天都試一次，選「影片時段內打的場次最多」的那一天（連續幾天同一時段打本也能分辨）。
+function resolveClock(text, atVideo = null) {
   const m = text.trim().match(/^(\d{1,2})[:：](\d{2})(?:[:：](\d{2}(?:\.\d+)?))?$/);
   if (!m) return null;
   const [h, mi, s] = [Number(m[1]), Number(m[2]), Number(m[3] || 0)];
   if (h > 23 || mi > 59 || s >= 60) return null;
-  const [lo, hi] = videoRange() || refRange();
+  const vr = videoRange();
+  const [lo, hi] = vr || refRange();
   const base = new Date(lo);
+  const byCount = !vr && atVideo != null && state.videoLen > 0;
   let best = null;
-  for (const off of [-1, 0, 1, 2]) {
+  for (const off of [-2, -1, 0, 1, 2]) {
     const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + off, h, mi, 0, 0).getTime() + s * 1000;
     const dist = d < lo ? lo - d : d > hi ? d - hi : 0;
-    if (!best || dist < best.dist) best = { ms: d, dist };
+    const count = byCount ? fightsBetween(d - atVideo * 1000, d + (state.videoLen - atVideo) * 1000) : 0;
+    if (!best || count > best.count || (count === best.count && dist < best.dist)) best = { ms: d, dist, count };
   }
   return best.ms;
+}
+// 這段本機時間內有幾把（有重疊就算）
+function fightsBetween(from, to) {
+  const b = state.report.startTime;
+  return state.report.fights.filter((f) => b + f.startTime < to && b + f.endTime > from).length;
 }
 function refRange() {
   const base = state.report.startTime;
@@ -197,7 +207,7 @@ function updateVideoLen() {
   const len = playerReady() ? player.getDuration() : 0;
   if (!(len > 0) || Math.abs(len - state.videoLen) < 1) return;
   state.videoLen = len;
-  if (state.report && state.cal) refreshFilters();
+  if (state.report && state.cal) { refreshFilters(); fillCalDate(); }
 }
 const playerReady = () => player && typeof player.getCurrentTime === 'function';
 const isPlaying = () => playerReady() && player.getPlayerState?.() === YT.PlayerState.PLAYING;
@@ -385,14 +395,41 @@ function setOffset(sec) {
   sec = Math.round(sec * 100) / 100;
   setCal(b.anchorVideo + sec, b.anchorWall, b);
 }
+// 「影片日期」選單：時鐘只有時間沒有日期，配錯天時可以整段往前／往後移一天
+const DAY_MS = 86_400_000;
+function fillCalDate() {
+  const row = $('calDateRow');
+  if (!state.cal || !state.report) { row.hidden = true; return; }
+  row.hidden = false;
+  const len = state.videoLen || 0;
+  const opts = [];
+  for (let k = -2; k <= 2; k++) {
+    const start = videoToWall(0) + k * DAY_MS;
+    const d = new Date(start);
+    const n = len ? fightsBetween(start, start + len * 1000) : null;
+    opts.push(`<option value="${k}">${d.getMonth() + 1}/${d.getDate()} ${fmtClock(start).slice(0, 5)} 開始${n != null ? `（影片內 ${n} 把）` : ''}</option>`);
+  }
+  $('calDateSel').innerHTML = opts.join('');
+  $('calDateSel').value = '0';
+}
+function shiftCalDays(k) {
+  const c = state.cal;
+  if (!c || !k) return;
+  const b = c.base || c;
+  state.rangeOnly = true;
+  $('rangeOnly').checked = true;
+  setCal(c.anchorVideo, c.anchorWall + k * DAY_MS, { anchorVideo: b.anchorVideo, anchorWall: b.anchorWall + k * DAY_MS });
+}
 function updateCalStatus() {
   updateOffsetUI();
+  fillCalDate();
   const el = $('calStatus');
   if (state.cal) {
     const how = '已校正';
     const off = calOffset();
     const adj = off ? `（手動偏移 ${off > 0 ? '+' : ''}${off.toFixed(1)} 秒）` : '';
-    el.textContent = `${how}：影片 0:00 ＝ 本機 ${fmtClock(videoToWall(0), true)}${adj}`;
+    const d0 = new Date(videoToWall(0));
+    el.textContent = `${how}：影片 0:00 ＝ ${d0.getMonth() + 1}/${d0.getDate()} ${fmtClock(videoToWall(0), true)}${adj}`;
     el.classList.add('ok');
   } else {
     el.textContent = '尚未校正';
@@ -401,6 +438,11 @@ function updateCalStatus() {
 }
 // base：自動校正（直播時間／讀取時鐘／方法一、二）的結果；手動微調只改 anchorVideo，偏移量＝和 base 的差
 async function setCal(anchorVideo, anchorWall, base = null) {
+  if (!base) {
+    // 新的校正：列表直接切到影片時段內的場次
+    state.rangeOnly = true;
+    $('rangeOnly').checked = true;
+  }
   state.cal = { anchorVideo, anchorWall, base: base || { anchorVideo, anchorWall } };
   updateCalStatus();
   banner(null);
@@ -919,7 +961,7 @@ document.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('clic
 $('calClockBtn').addEventListener('click', () => {
   if (!state.report) { banner('請先載入 log。'); return; }
   if (!playerReady()) { banner('請先載入影片。'); return; }
-  const ms = resolveClock($('clockInput').value);
+  const ms = resolveClock($('clockInput').value, curVideo());
   if (ms == null) { banner('時間格式看不懂，請輸入像 21:47 或 21:47:00 的時間。'); return; }
   setCal(curVideo(), ms);
 });
@@ -940,6 +982,7 @@ $('offsetInput').addEventListener('change', (e) => {
   setOffset(v);
 });
 $('offsetReset').addEventListener('click', () => setOffset(0));
+$('calDateSel').addEventListener('change', () => shiftCalDays(Number($('calDateSel').value)));
 
 function jumpEvent(dir) {
   if (!state.events.length) return;
@@ -1108,7 +1151,7 @@ async function runClockCalibration({ repick = false } = {}) {
         text = prompt('OCR 讀不出時鐘，請輸入畫面上顯示的時間（例如 21:47）：', '') || '';
         if (!text) throw Object.assign(new Error('已取消。'), { silent: true });
       }
-      const ms = resolveClock(text);
+      const ms = resolveClock(text, a);
       if (ms == null) throw new Error(`時間「${text}」看不懂。`);
       const minute = Math.round(ms / 60000);
       const win = await ClockCal.coarseWindow({ ...io0(), log: setOcrStatus }, a);
