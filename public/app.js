@@ -457,18 +457,28 @@ async function setCal(anchorVideo, anchorWall, base = null) {
 }
 
 // ---------- 我的職業（第一視角） ----------
-function fillJobs() {
+// 職業選單：選了場次後只列出這一把隊伍裡有的職業；還沒選場次時列出全部
+function renderJobOptions(fight) {
   const sel = $('jobSel');
   const groups = [['tank', '坦克'], ['healer', '治療'], ['melee', '近戰'], ['ranged', '遠程物理'], ['caster', '魔法']];
-  sel.innerHTML = groups
+  const inFight = fight ? new Set(fight.players.map((p) => p.job).filter(Boolean)) : null;
+  let html = groups
     .map(([role, label]) => {
       const opts = Object.entries(JOBS)
-        .filter(([, v]) => v[1] === role)
+        .filter(([k, v]) => v[1] === role && (!inFight || inFight.has(k)))
         .map(([k, v]) => `<option value="${k}">${v[0]}</option>`)
         .join('');
-      return `<optgroup label="${label}">${opts}</optgroup>`;
+      return opts ? `<optgroup label="${label}">${opts}</optgroup>` : '';
     })
     .join('');
+  // 之前選的職業這一把沒有：仍保留在最上面，讓使用者知道目前選的是什麼
+  if (inFight && state.job && !inFight.has(state.job)) {
+    html = `<option value="${state.job}">${esc(jobName(state.job))}（這一把沒有）</option>` + html;
+  }
+  sel.innerHTML = html;
+  sel.value = state.job;
+}
+function fillJobs() {
   // 預設：這部影片上次選的職業 → log 記錄者（ACT 的主角，通常就是第一視角）在這段時間最常玩的職業
   const meId = state.report.me?.id;
   const count = {};
@@ -478,7 +488,7 @@ function fillJobs() {
   }
   const meJob = Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0];
   state.job = (state.videoId && lsGet('job:' + state.videoId, '')) || meJob || lsGet('job', '') || 'Paladin';
-  sel.value = state.job;
+  renderJobOptions(state.fight && zoneFights().includes(state.fight) ? state.fight : null);
   fillGcdInput();
 }
 
@@ -584,6 +594,7 @@ async function selectFight(id, { seek = true } = {}) {
 
 async function loadFightData() {
   const token = ++state.loadingFight;
+  renderJobOptions(state.fight);
   const me = resolveMe(state.fight);
   state.playerId = me?.id ?? null;
   $('jobWho').textContent = me
