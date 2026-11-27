@@ -661,11 +661,12 @@ async function fightData(fightId, playerId) {
 }
 
 // ---------- 死法統計（趣味） ----------
-// 只頒準確度高的獎項：死最多、最常第一個倒、撞電網、滿血被一招秒殺、帶著易傷還硬吃、死亡宣告時間到、一招團滅
+// 只頒準確度高的獎項：死最多、最常第一個倒、撞電網、非坦克吃死刑、滿血被一招秒殺、帶著易傷還硬吃、死亡宣告時間到、一招團滅
 const AWARDS = [
   { key: 'most', icon: '⚰️', title: '地板常客', desc: '死最多次' },
   { key: 'first', icon: '🚩', title: '開路先鋒', desc: '最常是該把第一個倒下的人' },
   { key: 'wall', icon: '⚡', title: '電網之友', desc: '走出（或被擊退出）場地邊界，撞到電網', list: true },
+  { key: 'buster', icon: '⚖️', title: 'BOSS給予死刑', desc: '不是坦克，卻吃到死刑（只該打坦克的強力單體攻擊）被打死', list: true },
   { key: 'oneshot', icon: '🔪', title: '一刀入魂', desc: '滿血（90% 以上）被一招直接打死', list: true },
   { key: 'vuln', icon: '🎯', title: '易傷收藏家', desc: '身上帶著受傷加重（易傷）還硬吃，被打死', list: true },
   { key: 'doom', icon: '💀', title: '死神的約定', desc: '死亡宣告時間到', list: true },
@@ -686,7 +687,7 @@ async function renderFun() {
   if (token !== funToken) return;
 
   const people = new Map(); // 名字 -> { name, job, me, count: {most, first, ...} }
-  const items = { wall: [], oneshot: [], vuln: [], doom: [], wipe: [] };
+  const items = { wall: [], buster: [], oneshot: [], vuln: [], doom: [], wipe: [] };
   const others = new Map(); // 名字 -> [死亡]
   let total = 0;
   const person = (f, d) => {
@@ -720,6 +721,7 @@ async function renderFun() {
       if (!d.dot && d.hpPct != null && d.hpPct >= 0.9 && d.byAgo != null && d.byAgo <= 4) { bump(e, 'oneshot'); items.oneshot.push(occ); awarded = true; }
       if (!d.dot && d.vuln > 0) { bump(e, 'vuln'); items.vuln.push({ ...occ, text: `${occ.text}，易傷 ${d.vuln} 層` }); awarded = true; }
       if (d.doom) { bump(e, 'doom'); items.doom.push(occ); awarded = true; }
+      if (d.buster) { bump(e, 'buster'); items.buster.push(occ); awarded = true; }
       if (d.wall) { bump(e, 'wall'); items.wall.push({ ...occ, text: '撞到場地邊界' }); awarded = true; }
       if (!awarded) {
         if (!others.has(e.name)) others.set(e.name, { e, list: [] });

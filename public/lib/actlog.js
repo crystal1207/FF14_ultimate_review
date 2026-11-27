@@ -21,6 +21,7 @@ const VULN_NAMES = new Set([
   '易伤', '魔法易伤', '物理易伤',
 ]);
 const DOOM_NAMES = new Set(['死亡宣告', 'Doom', '死の宣告', 'Verhängnis', 'Glas']);
+const TANK_JOBS = new Set(['Paladin', 'Warrior', 'DarkKnight', 'Gunbreaker', 'Gladiator', 'Marauder']);
 const AUTO_IDS = new Set([0x7, 0x8]); // 自動攻擊、自動射擊
 const AUTO_NAMES = new Set(['attack', 'shot', '攻撃', '攻擊', '攻击', '射撃', '射擊', '射击', '']);
 const PRE_PULL_MS = 20_000; // 開打前保留多久的技能（倒數時的起手）
@@ -57,6 +58,8 @@ export function createParser({ title = 'log' } = {}) {
   const pos = new Map(); // 玩家 id -> { x, y } 最新座標（判斷撞到場地邊界用）
   const lastDot = new Map(); // 玩家 id -> 最後一次被持續傷害（DoT）打到的時間
   const trueNorth = new Set(); // 開著真北的玩家
+  const enemyHits = {}; // 敵人招式名稱 -> { casts, hits, tank }（找出死刑：幾乎只打坦克的單體招式）
+  const enemyCastNames = new Set(); // 敵人有讀條的招式名稱
   const posStats = {}; // 身位技：技能 ID -> 加成數值 -> { n, ok }（之後用來學哪些數值代表打到身位）
 
   const isFriendlySource = (id) => {
@@ -232,6 +235,7 @@ export function createParser({ title = 'log' } = {}) {
         const castTime = parseFloat(f[8]) || 0;
         casting.set(`${f[2]}:${f[4]}`, { ts, castTime, name: f[5] });
         // 敵人讀條直接記成一條讀條條（實際傷害常由別的隱形單位打出，無法可靠配對）
+        if (pull && !isFriendlySource(f[2]) && isEnemy(f[2]) && f[5]) enemyCastNames.add(f[5]);
         if (pull && !isFriendlySource(f[2]) && isEnemy(f[2]) && f[5] && !/^unknown_/i.test(f[5])) {
           const dup = pull.enemy.findLast((c) => c.name === f[5] && c.castStart != null && Math.abs(c.castStart - ts) < 800);
           if (!dup) {
@@ -289,6 +293,10 @@ export function createParser({ title = 'log' } = {}) {
               if (VULN_NAMES.has(n) && s.ts < ts - 50 && s.until > ts) vuln = Math.max(vuln, s.stacks || 1);
             }
             lastHit.set(tgt, { name: f[5], ts, hp: Number(f[24]) || 0, max: Number(f[25]) || 0, vuln });
+            const eh = (enemyHits[f[5]] ||= { casts: 0, hits: 0, tank: 0 });
+            eh.hits++;
+            if (TANK_JOBS.has(actors[tgt]?.job)) eh.tank++;
+            if (!f[45] || f[45] === '0') eh.casts++;
           }
         }
 
@@ -337,6 +345,7 @@ export function createParser({ title = 'log' } = {}) {
             ts,
             target: f[2],
             name: f[3],
+            job: actors[f[2]]?.job || null,
             killer: f[5] || '',
             by: lh?.name || '',
             byAgo: lh ? (ts - lh.ts) / 1000 : null,
@@ -382,8 +391,23 @@ export function createParser({ title = 'log' } = {}) {
       }
     }
   }
+  // 死刑：有讀條、每次只打 1～2 人、被打的幾乎都是坦克的招式
+  function markBusters() {
+    const busters = new Set();
+    for (const [name, h] of Object.entries(enemyHits)) {
+      if (AUTO_NAMES.has(name.toLowerCase()) || !enemyCastNames.has(name)) continue;
+      if (h.casts >= 4 && h.hits / h.casts <= 2.2 && h.tank / h.hits >= 0.75) busters.add(name);
+    }
+    for (const fight of fights) {
+      for (const d of fight.deaths) {
+        d.buster = !d.dot && busters.has(d.by) && d.job != null && !TANK_JOBS.has(d.job) && d.byAgo != null && d.byAgo <= 3;
+      }
+    }
+  }
+
   function finish() {
     if (pull) endPull(lastCombat + 1);
+    markBusters();
     return {
       title,
       lines,

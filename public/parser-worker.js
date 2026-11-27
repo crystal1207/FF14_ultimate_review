@@ -84,6 +84,7 @@ const deathOut = (d, f) => ({
   doom: d.doom,
   dot: d.dot,
   wall: d.wall,
+  buster: d.buster,
 });
 
 // 好幾把的死亡（死法統計用）
