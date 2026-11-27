@@ -157,7 +157,14 @@
       </div>
 
       <div class="notes">
-        <label for="noteInput">這一把的筆記 <span id="noteSaved" class="muted small"></span></label>
+        <div class="notes-head">
+          <label for="noteInput">這一把的筆記 <span id="noteSaved" class="muted small"></span></label>
+          <span class="notes-tools">
+            <button type="button" id="noteExport" class="small" title="把這個瀏覽器裡所有場次的筆記存成一個檔案（換電腦或備份用）">匯出全部筆記</button>
+            <button type="button" id="noteImportBtn" class="small" title="讀入之前匯出的筆記檔，和現有的筆記合併">匯入筆記</button>
+            <input type="file" id="noteImport" accept=".json,application/json" hidden>
+          </span>
+        </div>
         <textarea id="noteInput" rows="2" placeholder="例如：P3 第二輪踩錯塔，下次先看 debuff 再移動" disabled></textarea>
       </div>
 

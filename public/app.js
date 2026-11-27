@@ -1024,6 +1024,72 @@ $('noteInput').addEventListener('input', () => {
   }, 600);
 });
 
+// 匯出／匯入筆記：存成 JSON 檔，換電腦或備份用
+function allNotes() {
+  return Object.entries(storePrefix('note:'))
+    .filter(([, text]) => typeof text === 'string' && text.trim())
+    .map(([key, text]) => ({ start: Number(key.slice(5)), text }))
+    .filter((n) => Number.isFinite(n.start))
+    .sort((a, b) => a.start - b.start);
+}
+function exportNotes() {
+  const notes = allNotes();
+  if (!notes.length) { banner('目前沒有任何筆記可以匯出。'); return; }
+  const pad = (n) => String(n).padStart(2, '0');
+  const local = (ms) => { const d = new Date(ms); return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+  const data = {
+    app: 'FF14副本復盤記錄',
+    type: 'notes',
+    version: 1,
+    exported: new Date().toISOString(),
+    // start：那一把的開打時間（毫秒），用來對應場次；time 是方便人看的本機時間
+    notes: notes.map((n) => ({ start: n.start, time: local(n.start), text: n.text })),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  a.href = url;
+  a.download = `FF14復盤筆記_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  banner(`已匯出 ${notes.length} 則筆記。`, 'info');
+}
+async function importNotes(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { banner('這不是筆記檔（讀不出內容）。'); return; }
+  const list = Array.isArray(data?.notes) ? data.notes : null;
+  if (!list) { banner('這不是本工具匯出的筆記檔。'); return; }
+  let added = 0, merged = 0, same = 0;
+  for (const n of list) {
+    const start = Number(n?.start);
+    const text = typeof n?.text === 'string' ? n.text : '';
+    if (!Number.isFinite(start) || !text.trim()) continue;
+    const key = 'note:' + start;
+    const cur = storeGet(key);
+    let next;
+    if (!cur || !String(cur).trim()) { next = text; added++; }
+    else if (cur === text || String(cur).includes(text)) { same++; continue; }
+    else { next = `${cur}
+---
+${text}`; merged++; } // 兩邊都有、內容不同：保留兩份
+    if (!saveStore(key, next)) return;
+  }
+  state.notes = storePrefix('note:');
+  if (state.report) renderPulls();
+  if (state.fight) loadNote();
+  banner(`匯入完成：新增 ${added} 則${merged ? `、合併 ${merged} 則（兩邊內容不同，兩份都保留）` : ''}${same ? `、${same} 則已經有了` : ''}。`, 'info');
+}
+$('noteExport').addEventListener('click', exportNotes);
+$('noteImportBtn').addEventListener('click', () => $('noteImport').click());
+$('noteImport').addEventListener('change', async () => {
+  const f = $('noteImport').files[0];
+  $('noteImport').value = '';
+  if (f) await importNotes(f);
+});
+
 // ---------- 事件繫結 ----------
 $('loadForm').addEventListener('submit', (e) => { e.preventDefault(); loadAll(); });
 $('refreshBtn').addEventListener('click', async () => { await refreshLogList({ ask: true }); if (state.report) loadAll(); });
