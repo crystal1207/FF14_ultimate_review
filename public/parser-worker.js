@@ -78,6 +78,7 @@ const deathOut = (d, f) => ({
   hpPct: d.hpPct,
   vuln: d.vuln,
   doom: d.doom,
+  wall: d.wall,
 });
 
 // 好幾把的死亡（死法統計用）

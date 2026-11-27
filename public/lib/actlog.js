@@ -53,6 +53,7 @@ export function createParser({ title = 'log' } = {}) {
   const lastHit = new Map(); // 玩家 id -> { name, ts, hp, max, vuln } 最後一次被敵人打的招式（hp 是被打之前的血量）
   const statuses = new Map(); // 玩家 id -> Map(狀態名稱 -> { ts, until, stacks })，只記易傷和死亡宣告
   const doomExpired = new Map(); // 玩家 id -> 死亡宣告時間到的時間
+  const pos = new Map(); // 玩家 id -> { x, y } 最新座標（判斷撞到場地邊界用）
 
   const isFriendlySource = (id) => {
     if (isPlayer(id)) return true;
@@ -136,6 +137,27 @@ export function createParser({ title = 'log' } = {}) {
     return merged.map((s, i) => ({ id: i + 1, name: s.name, t: (i === 0 ? 0 : s.from - p.start) / 1000 }));
   }
 
+  function readPos(line) {
+    const f = line.split('|');
+    if (f[2] !== 'Change' || !isPlayer(f[3])) return;
+    let p = pos.get(f[3]);
+    for (let i = 4; i < f.length - 1; i += 2) {
+      if (f[i] === 'PosX') { if (!p) pos.set(f[3], (p = {})); p.x = Number(f[i + 1]); }
+      else if (f[i] === 'PosY') { if (!p) pos.set(f[3], (p = {})); p.y = Number(f[i + 1]); }
+    }
+  }
+
+  // 撞到場地邊界（電網）：沒有兇手（被 Boss 的招式打死時兇手會是那個 Boss）、位置在場地邊緣。
+  // 被擊退撞到邊界也算。現在的高難度副本場地幾乎都是以 (100, 100) 為中心、半徑或半邊長 20 碼
+  function hitWall(f) {
+    if (f[4] !== 'E0000000') return false;
+    const p = pos.get(f[2]);
+    if (!p || p.x == null || p.y == null) return false;
+    const r = Math.hypot(p.x - 100, p.y - 100);
+    // 座標不是每一瞬間都有紀錄，最後記到的位置常比撞牆處靠內一點；被擊退時也可能衝出邊界一點
+    return r >= 17 && r <= 30;
+  }
+
   function addCast(list, ts, src, f, castInfo) {
     const owner = actors[src]?.owner;
     list.push({
@@ -150,6 +172,11 @@ export function createParser({ title = 'log' } = {}) {
 
   function push(line) {
     lines++;
+    // 261：角色資料變化，裡面有座標（PosX／PosY）。數量很多，只在打本中、只記玩家
+    if (line.startsWith('261|')) {
+      if (pull && line.includes('|10', 30)) readPos(line);
+      return;
+    }
     const type = line.slice(0, 2);
     if (line[2] !== '|' || !WANT.has(type)) return;
     const f = line.split('|');
@@ -291,6 +318,7 @@ export function createParser({ title = 'log' } = {}) {
             hpPct: lh && lh.max > 0 ? lh.hp / lh.max : null,
             vuln: lh?.vuln || 0,
             doom: de != null && ts - de < 5000,
+            wall: hitWall(f),
           });
         }
         break;
