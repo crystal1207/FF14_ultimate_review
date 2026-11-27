@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FF14副本復盤記錄</title>
+  <link rel="stylesheet" href="app.css?v=dev">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">FF14副本復盤記錄</div>
+    <form id="loadForm" class="load-form">
+      <select id="logSel" title="ACT／IINACT 的戰鬥紀錄（Network_*.log）"></select>
+      <button type="button" id="pickDirBtn" title="選擇 ACT／IINACT 的 log 資料夾，之後會自動列出每天的 log（Chrome／Edge）" hidden>選擇資料夾…</button>
+      <button type="button" id="pickFileBtn" title="選擇一個 Network_*.log">選擇檔案…</button>
+      <input type="file" id="fileInput" accept=".log" hidden>
+      <input id="videoInput" placeholder="YouTube 影片網址" autocomplete="off">
+      <button type="submit" class="primary">載入</button>
+      <button type="button" id="refreshBtn" title="重新讀取 log 資料夾並重新解析（ACT 還在記錄時使用）">重新整理</button>
+    </form>
+    <button type="button" id="helpBtn" class="ghost" title="快捷鍵說明">?</button>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="layout">
+    <aside class="pulls">
+      <div class="pulls-head">
+        <span>當晚把數</span>
+        <label class="small"><input type="checkbox" id="autoSwitch" checked> 自動切換</label>
+      </div>
+      <div class="pulls-filter">
+        <label class="small"><input type="checkbox" id="rangeOnly" checked> 只看影片時段內的場次</label>
+        <select id="daySel" title="還沒校正時，依日期篩選（凌晨 6 點前算前一天）"></select>
+        <select id="zoneSel" title="只看這個副本"></select>
+      </div>
+      <div id="pullList" class="pull-list"><p class="muted pad">選擇當天的 log 後按「載入」，會列出每一把。</p><p class="pad"><button type="button" id="sampleBtn">用範例 log 試試看</button></p><p class="muted pad small">範例是程式產生的假資料，沒有對應的影片，只能看時間軸。</p></div>
+    </aside>
+
+    <section class="stage">
+      <div class="video-wrap">
+        <div id="player"></div>
+        <div id="videoEmpty" class="video-empty">貼上 YouTube 影片網址後按「載入」</div>
+        <div id="ocrShield" class="ocr-shield" hidden>
+          <div id="ocrBoxShow" class="box-rect"></div>
+          <div class="ocr-status"><span id="ocrStatus">準備中…</span> <button id="ocrCancelBtn">取消</button></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="ctrl-group">
+          <button data-step="-1" title="倒退 1 秒">−1s</button>
+          <button data-step="-0.0333" title="倒退一格（約 1/30 秒）">−1格</button>
+          <button id="playBtn" title="播放／暫停（空白鍵）">▶︎</button>
+          <button data-step="0.0333" title="前進一格">+1格</button>
+          <button data-step="1" title="前進 1 秒">+1s</button>
+          <select id="rateSel" title="播放速度">
+            <option value="0.25">0.25×</option>
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </div>
+        <div class="readout">
+          <span>影片 <b id="videoTime">--:--</b></span>
+          <span>本機 <b id="wallTime">--:--:--</b></span>
+          <span id="fightPos" class="muted"></span>
+        </div>
+      </div>
+
+      <details id="calPanel" class="cal">
+        <summary>時間校正 <span id="calStatus" class="cal-status">尚未校正</span></summary>
+        <div class="cal-body">
+          <div class="cal-row">
+            <span class="step">最準</span>
+            <span>讀取畫面右上角的時鐘，自動找出跳分鐘的那一格（需要同意分享這個分頁，建議先把影片畫質調到 1080p）：</span>
+            <button id="ocrCalBtn" class="primary">讀取畫面時鐘自動校正</button>
+            <button id="ocrBoxBtn" title="重新框選時鐘位置">重新框選時鐘</button>
+          </div>
+          <div class="cal-row">
+            <span class="step">方法一</span>
+            <span>暫停在畫面右上角「本」時鐘剛跳到新分鐘的那一格，輸入畫面上的時間（log 用的是同一個電腦時鐘）：</span>
+            <input id="clockInput" placeholder="21:47" size="8">
+            <button id="calClockBtn" class="primary">目前畫面＝這個時間</button>
+          </div>
+          <div class="cal-row">
+            <span class="step">方法二</span>
+            <span>暫停在選取的這一把剛開打的那一格：</span>
+            <button id="calPullBtn">目前畫面＝這一把開打</button>
+          </div>
+          <div class="cal-row">
+            <span class="step">微調</span>
+            <span>自動校正後如果還差一點，用時間軸上方的「時間軸偏移」手動調整（快捷鍵 <kbd>[</kbd> <kbd>]</kbd> 每次 0.1 秒，加 Shift 每次 1 秒）。</span>
+          </div>
+          <p class="muted small">每部影片校正一次就會記住。還沒校正時，請先在左邊選日期、點一把這部影片裡打的場次，再用上面任一方法校正（程式用選取的那一把判斷是哪一天）。校正後，上方的「本機」時間會跟畫面右上角的時鐘一致，時鐘跳分鐘時這裡應該剛好是 :00。</p>
+        </div>
+      </details>
+
+      <div class="tl-toolbar">
+        <label title="影片是你的第一視角，時間軸會顯示這個職業的技能">我的職業
+          <select id="jobSel"></select>
+        </label>
+        <span id="jobWho" class="muted small"></span>
+        <span class="offset" title="技能標記比影片畫面早就按「＋」，比畫面晚就按「−」。快捷鍵 [ ]（加 Shift 每次 1 秒）">
+          時間軸偏移
+          <button data-nudge="-1">−1</button>
+          <button data-nudge="-0.1">−0.1</button>
+          <input id="offsetInput" type="number" step="0.1" value="0" disabled>
+          <span class="small">秒</span>
+          <button data-nudge="0.1">+0.1</button>
+          <button data-nudge="1">+1</button>
+          <button id="offsetReset" title="回到自動校正的結果" disabled>還原</button>
+        </span>
+        <label>縮放
+          <input type="range" id="zoom" min="3" max="60" value="18">
+        </label>
+        <label title="點標記時，影片跳到標記前幾秒">提前
+          <select id="leadSel">
+            <option value="0">0 秒</option>
+            <option value="1">1 秒</option>
+            <option value="3" selected>3 秒</option>
+            <option value="5">5 秒</option>
+          </select>
+        </label>
+        <label class="small"><input type="checkbox" id="follow" checked> 時間軸跟隨播放</label>
+        <label class="small" title="你這個職業 2.5 秒技能的實際 GCD（例如角色面板的 2.42）。清空＝依這一把自動推算。每個職業分別記住">GCD
+          <input id="gcdInput" type="number" step="0.01" min="1" max="3.5" placeholder="自動" class="gcd-input"> 秒
+        </label>
+        <span id="gcdSummary" class="gcd-summary small"></span>
+        <span class="legend">
+          <i class="lg gcd"></i>GCD <i class="lg ogcd"></i>oGCD <i class="lg pet"></i>寵物 <i class="lg item"></i>爆發藥 <i class="lg idle"></i>空轉 <i class="lg cancel"></i>讀條取消 <i class="lg death"></i>死亡
+        </span>
+      </div>
+
+      <div id="timeline" class="timeline">
+        <div class="tl-labels">
+          <div class="lane-label ruler">時間</div>
+          <div class="lane-label phase" title="依隊伍正在打的主要敵人推測的區段">目標</div>
+          <div class="lane-label boss">Boss</div>
+          <div class="lane-label gcd">GCD</div>
+          <div class="lane-label gap" title="每兩個 GCD 之間的間隔：紅色＝比最快能按的時間慢（空轉），灰色＝停手超過 8 秒（轉場等）">間隔</div>
+          <div class="lane-label ogcd">oGCD</div>
+          <div class="lane-label death">死亡</div>
+        </div>
+        <div id="tlScroll" class="tl-scroll">
+          <div id="tlCanvas" class="tl-canvas"></div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <label for="noteInput">這一把的筆記 <span id="noteSaved" class="muted small"></span></label>
+        <textarea id="noteInput" rows="2" placeholder="例如：P3 第二輪踩錯塔，下次先看 debuff 再移動" disabled></textarea>
+      </div>
+
+      <footer class="about">
+        <section>
+          <h2>關於 FF14副本復盤記錄</h2>
+          <p>把記錄的戰鬥紀錄（log）和你的 YouTube 第一視角影片對齊。點左邊的場次、時間軸上的 Boss 招式、技能或死亡，影片就會跳到那一刻；還會標出 GCD 空轉，方便打完副本後檢討。所有職業都適用，不需要 FFLogs 帳號。</p>
+          <ol>
+            <li><b>選 log</b>：按「選擇資料夾…」選 ACT 的 log 資料夾（通常是 %APPDATA%\Advanced Combat Tracker\FFXIVLogs），或「選擇檔案…」選當天的 Network_*.log</li>
+            <li><b>貼影片網址</b>：貼上 YouTube 影片網址後按「載入」</li>
+            <li><b>時間校正</b>：點一把影片裡打的場次，打開「時間校正」按「讀取畫面時鐘自動校正」（錄影畫面要有電腦時鐘），之後可以用「時間軸偏移」微調</li>
+          </ol>
+          <p class="muted">建議使用電腦版 Chrome 或 Edge。快捷鍵請按右上角的「?」。</p>
+        </section>
+        <section>
+          <h2>免責聲明</h2>
+          <ul>
+            <li>本工具為玩家自製的非官方工具，與 SQUARE ENIX 無關。FINAL FANTASY XIV 及遊戲內的名稱、圖示等素材，著作權屬於 SQUARE ENIX CO., LTD.</li>
+            <li>本工具只讀取使用者自己選擇的 log 檔，不會連線或修改遊戲。</li>
+            <li>log 只在你的瀏覽器裡解析，不會上傳到任何伺服器；筆記與校正值也只存在你的瀏覽器。</li>
+            <li>分析結果（場次判定、目標區段、GCD 空轉等）是依 log 推算，可能有誤差，僅供參考。</li>
+          </ul>
+        </section>
+        <p class="author">作者：紅月@迦樓羅</p>
+      </footer>
+    </section>
+  </main>
+
+  <dialog id="ocrDebugDlg" class="ocr-debug">
+    <h3>程式實際截到的畫面</h3>
+    <p class="small">請把這個視窗截圖傳給開發者，方便找出原因。<b style="color:#0f0">綠框</b>＝程式認為的播放器範圍，<b style="color:#f0f">粉紅框</b>＝程式讀取的時鐘位置。</p>
+    <div id="ocrDebugBody"></div>
+    <form method="dialog"><button class="primary">關閉</button></form>
+  </dialog>
+
+  <dialog id="helpDlg">
+    <h3>快捷鍵</h3>
+    <table>
+      <tr><td>空白鍵</td><td>播放／暫停</td></tr>
+      <tr><td>← / →</td><td>上一個／下一個事件（技能、Boss 招式、死亡）</td></tr>
+      <tr><td>J / L</td><td>倒退／前進 5 秒</td></tr>
+      <tr><td>, / .</td><td>倒退／前進一格</td></tr>
+      <tr><td>D</td><td>跳到下一次死亡</td></tr>
+      <tr><td>P / N</td><td>上一把／下一把</td></tr>
+      <tr><td>[ / ]</td><td>時間軸偏移 −0.1／+0.1 秒（加 Shift 為 1 秒）</td></tr>
+    </table>
+    <p class="muted small">點時間軸上的標記會跳到該時間點（減去「提前」秒數）；點時間刻度列會直接跳到該秒。</p>
+    <form method="dialog"><button class="primary">知道了</button></form>
+  </dialog>
+
+  <script src="jobs.js?v=dev"></script>
+  <script src="clockocr.js?v=dev"></script>
+  <script src="clockcal.js?v=dev"></script>
+  <script type="module" src="app.js?v=dev"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>

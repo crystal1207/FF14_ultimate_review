@@ -1,0 +1,11 @@
+{
+  "name": "ultimate-review",
+  "version": "0.2.0",
+  "description": "FF14副本復盤記錄：ACT／IINACT 戰鬥紀錄 × YouTube 第一視角影片同步檢討工具（純前端）",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "sample": "node tools/make-sample-log.js"
+  }
+}

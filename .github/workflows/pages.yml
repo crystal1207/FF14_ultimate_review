@@ -1,0 +1,33 @@
+# 把 public/ 發佈到 GitHub Pages（推到 main 時自動更新）
+name: Deploy to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      # 每次部署把檔案網址的 ?v=dev 換成這次的版本，瀏覽器就不會用到舊的快取檔
+      - name: Stamp asset version
+        run: |
+          V="${GITHUB_SHA::7}"
+          sed -i "s/?v=dev/?v=$V/g" public/index.html public/app.js public/parser-worker.js
+          grep -c "?v=$V" public/index.html public/app.js public/parser-worker.js
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4
