@@ -78,6 +78,7 @@ const deathOut = (d, f) => ({
   hpPct: d.hpPct,
   vuln: d.vuln,
   doom: d.doom,
+  dot: d.dot,
   wall: d.wall,
 });
 

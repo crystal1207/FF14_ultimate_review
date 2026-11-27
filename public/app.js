@@ -661,6 +661,7 @@ const AWARDS = [
   { key: 'wipe', icon: '🌊', title: '一招團滅', desc: '同一招在幾秒內帶走 6 人以上', list: true, team: true },
 ];
 function killText(d) {
+  if (d.dot) return '被持續傷害（DoT）殺死';
   if (!d.ability) return '死因不明';
   return d.killer ? `被 ${d.killer} 的「${d.ability}」殺死` : `被「${d.ability}」殺死`;
 }
@@ -705,8 +706,8 @@ async function renderFun() {
       if (i === 0) bump(e, 'first');
       const occ = { fightId: f.id, no: idx + 1, t: d.t, who: e.name, me: e.me, text: killText(d) };
       let awarded = wipeSet.has(i);
-      if (d.hpPct != null && d.hpPct >= 0.9 && d.byAgo != null && d.byAgo <= 4) { bump(e, 'oneshot'); items.oneshot.push(occ); awarded = true; }
-      if (d.vuln > 0) { bump(e, 'vuln'); items.vuln.push({ ...occ, text: `${occ.text}，易傷 ${d.vuln} 層` }); awarded = true; }
+      if (!d.dot && d.hpPct != null && d.hpPct >= 0.9 && d.byAgo != null && d.byAgo <= 4) { bump(e, 'oneshot'); items.oneshot.push(occ); awarded = true; }
+      if (!d.dot && d.vuln > 0) { bump(e, 'vuln'); items.vuln.push({ ...occ, text: `${occ.text}，易傷 ${d.vuln} 層` }); awarded = true; }
       if (d.doom) { bump(e, 'doom'); items.doom.push(occ); awarded = true; }
       if (d.wall) { bump(e, 'wall'); items.wall.push({ ...occ, text: '撞到場地邊界' }); awarded = true; }
       if (!awarded) {

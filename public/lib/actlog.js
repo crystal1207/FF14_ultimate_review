@@ -11,7 +11,7 @@ const JOB_BY_ID = {
   39: 'Reaper', 40: 'Sage', 41: 'Viper', 42: 'Pictomancer',
 };
 
-const WANT = new Set(['01', '02', '03', '11', '20', '21', '22', '23', '25', '26', '30', '33']);
+const WANT = new Set(['01', '02', '03', '11', '20', '21', '22', '23', '24', '25', '26', '30', '33']);
 // 死法統計用的狀態（各語言客戶端的名稱）
 const VULN_NAMES = new Set([
   '受傷加重', '魔法受傷加重', '物理受傷加重',
@@ -54,6 +54,7 @@ export function createParser({ title = 'log' } = {}) {
   const statuses = new Map(); // 玩家 id -> Map(狀態名稱 -> { ts, until, stacks })，只記易傷和死亡宣告
   const doomExpired = new Map(); // 玩家 id -> 死亡宣告時間到的時間
   const pos = new Map(); // 玩家 id -> { x, y } 最新座標（判斷撞到場地邊界用）
+  const lastDot = new Map(); // 玩家 id -> 最後一次被持續傷害（DoT）打到的時間
 
   const isFriendlySource = (id) => {
     if (isPlayer(id)) return true;
@@ -305,6 +306,9 @@ export function createParser({ title = 'log' } = {}) {
         if (pull && isPlayer(f[2])) {
           const lh = lastHit.get(f[2]);
           const de = doomExpired.get(f[2]);
+          // 最後一下是持續傷害（DoT）：DoT 跳在最後一次被招式打到之後，而且離死亡很近
+          const dt = lastDot.get(f[2]);
+          const dot = dt != null && ts - dt < 4000 && (!lh || dt >= lh.ts);
           doomExpired.delete(f[2]);
           // byAgo：最後一次被打到是死亡前幾秒（太久代表可能是 DoT、debuff 或摔落）
           // 注意：死亡紀錄通常比實際倒地晚 1～2 秒
@@ -318,10 +322,16 @@ export function createParser({ title = 'log' } = {}) {
             hpPct: lh && lh.max > 0 ? lh.hp / lh.max : null,
             vuln: lh?.vuln || 0,
             doom: de != null && ts - de < 5000,
-            wall: hitWall(f),
+            dot,
+            wall: !dot && hitWall(f),
           });
         }
         break;
+      case '24': {
+        // 持續傷害／回復：24|時間|目標ID|目標|DoT 或 HoT|狀態ID|數值(16進位)|…
+        if (f[4] === 'DoT' && isPlayer(f[2]) && parseInt(f[6], 16) > 0) lastDot.set(f[2], ts);
+        break;
+      }
       case '26': {
         // 獲得狀態：26|時間|狀態ID|名稱|秒數|來源ID|來源|目標ID|目標|層數
         const name = f[3];
