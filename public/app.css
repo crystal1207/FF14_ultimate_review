@@ -269,3 +269,4 @@ dialog td:first-child { color: var(--accent); white-space: nowrap; }
 .fun-other h4 { margin: 6px 0; font-size: 14px; }
 .fun-other .person { margin-bottom: 8px; }
 .fun-other .person > b.me { color: #ff9b8a; }
+.fun-note { margin: 2px 0 6px; text-align: center; color: #e8c25a; font-size: 13px; }
