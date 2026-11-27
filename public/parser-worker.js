@@ -64,8 +64,31 @@ function fight(fightId, playerId) {
     phases: f.phases,
     mine: f.friendly.filter((c) => c.src === playerId || c.owner === playerId).map(cast),
     boss: f.enemy.map((c) => ({ ...cast(c), pet: undefined })),
-    deaths: f.deaths.map((d) => ({ t: rel(d.ts), target: d.target, name: d.name, ability: d.by })),
+    deaths: f.deaths.map((d) => deathOut(d, f)),
   };
+}
+
+const deathOut = (d, f) => ({
+  t: (d.ts - f.startTime) / 1000,
+  target: d.target,
+  name: d.name,
+  killer: d.killer,
+  ability: d.by,
+  byAgo: d.byAgo,
+  hpPct: d.hpPct,
+  vuln: d.vuln,
+  doom: d.doom,
+});
+
+// 好幾把的死亡（死法統計用）
+function deaths(fightIds) {
+  const out = {};
+  for (const id of fightIds) {
+    const f = report?.fights.find((x) => x.id === id);
+    if (!f) continue;
+    out[id] = f.deaths.map((d) => deathOut(d, f));
+  }
+  return out;
 }
 
 onmessage = async (e) => {
@@ -74,6 +97,7 @@ onmessage = async (e) => {
     let result;
     if (type === 'parse') result = await parse(e.data.file);
     else if (type === 'fight') result = fight(e.data.fightId, e.data.playerId);
+    else if (type === 'deaths') result = deaths(e.data.fightIds);
     postMessage({ id, result });
   } catch (err) {
     postMessage({ id, error: err.message || String(err) });

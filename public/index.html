@@ -137,6 +137,7 @@
         <span id="gcdSummary" class="gcd-summary small"></span>
         <span class="legend">
           <i class="lg gcd"></i>GCD <i class="lg ogcd"></i>oGCD <i class="lg pet"></i>寵物 <i class="lg item"></i>爆發藥 <i class="lg idle"></i>空轉 <i class="lg cancel"></i>讀條取消 <i class="lg death"></i>死亡
+          <button type="button" id="funBtn" class="fun-btn" title="統計左邊列表裡所有場次的死法，用頒獎的方式呈現">死法統計（趣味）</button>
         </span>
       </div>
 
@@ -159,6 +160,16 @@
         <label for="noteInput">這一把的筆記 <span id="noteSaved" class="muted small"></span></label>
         <textarea id="noteInput" rows="2" placeholder="例如：P3 第二輪踩錯塔，下次先看 debuff 再移動" disabled></textarea>
       </div>
+
+      <section id="funPanel" class="fun-panel" hidden>
+        <header>
+          <h3>🎖️ 死法頒獎典禮 <span class="fun-tag">趣味</span></h3>
+          <span id="funScope" class="muted small"></span>
+          <button type="button" id="funClose" class="ghost">收起</button>
+        </header>
+        <div id="funBody"></div>
+        <p class="muted small">統計範圍是左邊列表裡的場次。只頒準確度高的獎項；點任一筆會跳到影片死亡前幾秒。</p>
+      </section>
 
       <footer class="about">
         <section>

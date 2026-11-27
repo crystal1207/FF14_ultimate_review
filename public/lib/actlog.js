@@ -11,7 +11,15 @@ const JOB_BY_ID = {
   39: 'Reaper', 40: 'Sage', 41: 'Viper', 42: 'Pictomancer',
 };
 
-const WANT = new Set(['01', '02', '03', '11', '20', '21', '22', '23', '25', '33']);
+const WANT = new Set(['01', '02', '03', '11', '20', '21', '22', '23', '25', '26', '30', '33']);
+// 死法統計用的狀態（各語言客戶端的名稱）
+const VULN_NAMES = new Set([
+  '受傷加重', '魔法受傷加重', '物理受傷加重',
+  'Vulnerability Up', 'Magic Vulnerability Up', 'Physical Vulnerability Up',
+  '被ダメージ上昇', '被魔法ダメージ上昇', '被物理ダメージ上昇',
+  '易伤', '魔法易伤', '物理易伤',
+]);
+const DOOM_NAMES = new Set(['死亡宣告', 'Doom', '死の宣告', 'Verhängnis', 'Glas']);
 const AUTO_IDS = new Set([0x7, 0x8]); // 自動攻擊、自動射擊
 const AUTO_NAMES = new Set(['attack', 'shot', '攻撃', '攻擊', '攻击', '射撃', '射擊', '射击', '']);
 const PRE_PULL_MS = 20_000; // 開打前保留多久的技能（倒數時的起手）
@@ -42,7 +50,9 @@ export function createParser({ title = 'log' } = {}) {
   const recentFriendly = []; // 開打前的技能暫存
   const casting = new Map(); // src:abilityId -> { ts, castTime, name, cancelled? }
   const seenSeq = new Map(); // src:abilityId:seq -> true（AoE 多目標只算一次）
-  const lastHit = new Map(); // 玩家 id -> 最後一次被敵人打的招式
+  const lastHit = new Map(); // 玩家 id -> { name, ts, hp, max, vuln } 最後一次被敵人打的招式（hp 是被打之前的血量）
+  const statuses = new Map(); // 玩家 id -> Map(狀態名稱 -> { ts, until, stacks })，只記易傷和死亡宣告
+  const doomExpired = new Map(); // 玩家 id -> 死亡宣告時間到的時間
 
   const isFriendlySource = (id) => {
     if (isPlayer(id)) return true;
@@ -223,7 +233,14 @@ export function createParser({ title = 'log' } = {}) {
               if (!lt || lt.id !== tgt || ts - lt.ts > 1000) pull.targets.push({ ts, id: tgt });
             }
           }
-          if (enemy && isPlayer(tgt) && f[5]) lastHit.set(tgt, f[5]);
+          if (enemy && isPlayer(tgt) && f[5]) {
+            // 被打的這一刻身上有沒有易傷（同一瞬間才上的不算，那是這一招本身附加的）
+            let vuln = 0;
+            for (const [n, s] of statuses.get(tgt) || []) {
+              if (VULN_NAMES.has(n) && s.ts < ts - 50 && s.until > ts) vuln = Math.max(vuln, s.stacks || 1);
+            }
+            lastHit.set(tgt, { name: f[5], ts, hp: Number(f[24]) || 0, max: Number(f[25]) || 0, vuln });
+          }
         }
 
         // 同一次施放打到多個目標時只記一次
@@ -259,9 +276,43 @@ export function createParser({ title = 'log' } = {}) {
       }
       case '25':
         if (pull && isPlayer(f[2])) {
-          pull.deaths.push({ ts, target: f[2], name: f[3], by: lastHit.get(f[2]) || '' });
+          const lh = lastHit.get(f[2]);
+          const de = doomExpired.get(f[2]);
+          doomExpired.delete(f[2]);
+          // byAgo：最後一次被打到是死亡前幾秒（太久代表可能是 DoT、debuff 或摔落）
+          // 注意：死亡紀錄通常比實際倒地晚 1～2 秒
+          pull.deaths.push({
+            ts,
+            target: f[2],
+            name: f[3],
+            killer: f[5] || '',
+            by: lh?.name || '',
+            byAgo: lh ? (ts - lh.ts) / 1000 : null,
+            hpPct: lh && lh.max > 0 ? lh.hp / lh.max : null,
+            vuln: lh?.vuln || 0,
+            doom: de != null && ts - de < 5000,
+          });
         }
         break;
+      case '26': {
+        // 獲得狀態：26|時間|狀態ID|名稱|秒數|來源ID|來源|目標ID|目標|層數
+        const name = f[3];
+        const tgt = f[7];
+        if (!isPlayer(tgt) || !(VULN_NAMES.has(name) || DOOM_NAMES.has(name))) break;
+        let m = statuses.get(tgt);
+        if (!m) statuses.set(tgt, (m = new Map()));
+        m.set(name, { ts, until: ts + (parseFloat(f[4]) || 9999) * 1000, stacks: parseInt(f[9], 16) || 1 });
+        break;
+      }
+      case '30': {
+        // 失去狀態：死亡宣告在預定時間結束 ＝ 時間到（之後就會死）
+        const m = statuses.get(f[7]);
+        const s = m?.get(f[3]);
+        if (!s) break;
+        if (DOOM_NAMES.has(f[3]) && Math.abs(ts - s.until) < 1500) doomExpired.set(f[7], ts);
+        m.delete(f[3]);
+        break;
+      }
       case '33': {
         const cmd = (f[3] || '').toUpperCase();
         if (cmd === '40000003' || cmd === '40000002') endPull(ts, true);

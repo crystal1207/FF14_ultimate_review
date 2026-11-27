@@ -560,6 +560,7 @@ function renderPulls() {
   });
   list.innerHTML = html;
   markActivePull();
+  if (!$('funPanel').hidden) renderFun();
 }
 function markActivePull() {
   document.querySelectorAll('.pull').forEach((b) => b.classList.toggle('active', Number(b.dataset.fight) === state.fightId));
@@ -647,6 +648,119 @@ async function fightData(fightId, playerId) {
     deaths: raw.deaths,
   };
 }
+
+// ---------- 死法統計（趣味） ----------
+// 只頒準確度高的獎項：死最多、最常第一個倒、滿血被一招秒殺、帶著易傷還硬吃、死亡宣告時間到、一招團滅
+const AWARDS = [
+  { key: 'most', icon: '⚰️', title: '地板常客', desc: '死最多次' },
+  { key: 'first', icon: '🚩', title: '開路先鋒', desc: '最常是該把第一個倒下的人' },
+  { key: 'oneshot', icon: '🔪', title: '一刀入魂', desc: '滿血（90% 以上）被一招直接打死', list: true },
+  { key: 'vuln', icon: '🎯', title: '易傷收藏家', desc: '身上帶著受傷加重（易傷）還硬吃，被打死', list: true },
+  { key: 'doom', icon: '💀', title: '死神的約定', desc: '死亡宣告時間到', list: true },
+  { key: 'wipe', icon: '🌊', title: '一招團滅', desc: '同一招在幾秒內帶走 6 人以上', list: true, team: true },
+];
+function killText(d) {
+  if (!d.ability) return '死因不明';
+  return d.killer ? `被 ${d.killer} 的「${d.ability}」殺死` : `被「${d.ability}」殺死`;
+}
+let funToken = 0;
+async function renderFun() {
+  const body = $('funBody');
+  const fights = state.report ? zoneFights() : [];
+  if (!fights.length) { $('funScope').textContent = ''; body.innerHTML = '<p class="muted">左邊的列表沒有場次。</p>'; return; }
+  const token = ++funToken;
+  const byFight = await rpc({ type: 'deaths', fightIds: fights.map((f) => f.id) });
+  if (token !== funToken) return;
+
+  const people = new Map(); // 名字 -> { name, job, me, count: {most, first, ...} }
+  const items = { oneshot: [], vuln: [], doom: [], wipe: [] };
+  const others = new Map(); // 名字 -> [死亡]
+  let total = 0;
+  const person = (f, d) => {
+    const p = f.players.find((x) => x.id === d.target);
+    const name = p ? p.name : d.name;
+    let e = people.get(name);
+    if (!e) people.set(name, (e = { name, job: p?.job, me: false, count: {} }));
+    if (resolveMe(f)?.id === d.target) e.me = true;
+    return e;
+  };
+  const bump = (e, k) => { e.count[k] = (e.count[k] || 0) + 1; };
+  fights.forEach((f, idx) => {
+    const list = byFight[f.id] || [];
+    // 一招團滅：同一招 4 秒內 6 人以上
+    const wipeSet = new Set();
+    list.forEach((d, i) => {
+      if (!d.ability || wipeSet.has(i)) return;
+      const grp = list.map((x, j) => j).filter((j) => list[j].ability === d.ability && Math.abs(list[j].t - d.t) <= 4);
+      if (grp.length >= 6) {
+        grp.forEach((j) => wipeSet.add(j));
+        items.wipe.push({ fightId: f.id, no: idx + 1, t: d.t, text: `被 ${d.killer || 'Boss'} 的「${d.ability}」帶走 ${grp.length} 人` });
+      }
+    });
+    list.forEach((d, i) => {
+      total++;
+      const e = person(f, d);
+      bump(e, 'most');
+      if (i === 0) bump(e, 'first');
+      const occ = { fightId: f.id, no: idx + 1, t: d.t, who: e.name, me: e.me, text: killText(d) };
+      let awarded = wipeSet.has(i);
+      if (d.hpPct != null && d.hpPct >= 0.9 && d.byAgo != null && d.byAgo <= 4) { bump(e, 'oneshot'); items.oneshot.push(occ); awarded = true; }
+      if (d.vuln > 0) { bump(e, 'vuln'); items.vuln.push({ ...occ, text: `${occ.text}，易傷 ${d.vuln} 層` }); awarded = true; }
+      if (d.doom) { bump(e, 'doom'); items.doom.push(occ); awarded = true; }
+      if (!awarded) {
+        if (!others.has(e.name)) others.set(e.name, { e, list: [] });
+        others.get(e.name).list.push(occ);
+      }
+    });
+  });
+  $('funScope').textContent = `範圍：左邊列表 ${fights.length} 把，共 ${total} 次死亡`;
+  if (!total) { body.innerHTML = '<p class="muted">這些場次都沒有人死亡，全員優秀！</p>'; return; }
+
+  const who = (e) => `<span class="${e.me ? 'me' : ''}">${esc(e.name)}${e.job ? `（${esc(jobName(e.job))}）` : ''}${e.me ? '・我' : ''}</span>`;
+  const occBtn = (o, withWho = true) =>
+    `<button type="button" data-fight="${o.fightId}" data-t="${o.t}">#${o.no} ${fmtDur(o.t)} ${withWho && o.who ? esc(o.who) + ' ' : ''}<span class="cause">（${esc(o.text)}）</span></button>`;
+  const cards = AWARDS.map((a) => {
+    if (a.team) {
+      const list = items.wipe;
+      if (!list.length) return `<div class="award none"><h4>${a.icon} ${a.title}</h4><div class="desc">${a.desc}</div>從缺</div>`;
+      return `<div class="award"><h4>${a.icon} ${a.title}</h4><div class="desc">${a.desc}</div><div class="winner">🏅 全隊 × ${list.length} 次</div><div class="occ">${list.map((o) => occBtn(o, false)).join('')}</div></div>`;
+    }
+    const ranked = [...people.values()].filter((e) => e.count[a.key]).sort((x, y) => y.count[a.key] - x.count[a.key]);
+    if (!ranked.length) return `<div class="award none"><h4>${a.icon} ${a.title}</h4><div class="desc">${a.desc}</div>從缺</div>`;
+    const top = ranked[0].count[a.key];
+    const winners = ranked.filter((e) => e.count[a.key] === top);
+    const rest = ranked.filter((e) => e.count[a.key] < top).slice(0, 5);
+    const occ = a.list ? `<div class="occ">${items[a.key].map((o) => occBtn(o)).join('')}</div>` : '';
+    return `<div class="award"><h4>${a.icon} ${a.title}</h4><div class="desc">${a.desc}</div>
+      <div class="winner">🏅 ${winners.map(who).join('、')} × ${top} 次</div>
+      ${rest.length ? `<div class="others">其他：${rest.map((e) => `${esc(e.name)} ${e.count[a.key]}`).join('、')}</div>` : ''}
+      ${occ}</div>`;
+  }).join('');
+  const otherHtml = [...others.values()]
+    .sort((x, y) => y.list.length - x.list.length)
+    .map(({ e, list }) => `<div class="person"><b class="${e.me ? 'me' : ''}">${esc(e.name)}${e.job ? `（${esc(jobName(e.job))}）` : ''}${e.me ? '・我' : ''}</b> × ${list.length}<div class="occ">${list.map((o) => occBtn(o, false)).join('')}</div></div>`)
+    .join('');
+  body.innerHTML = `<div class="awards">${cards}</div>${otherHtml ? `<div class="fun-other"><h4>其他死法</h4>${otherHtml}</div>` : ''}`;
+}
+function toggleFun(show = $('funPanel').hidden) {
+  $('funPanel').hidden = !show;
+  $('funBtn').classList.toggle('active', show);
+  if (show) {
+    renderFun();
+    $('funPanel').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+}
+$('funBtn').addEventListener('click', () => toggleFun());
+$('funClose').addEventListener('click', () => toggleFun(false));
+$('funBody').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-fight][data-t]');
+  if (!b) return;
+  const fightId = Number(b.dataset.fight);
+  // 死亡紀錄通常比實際倒地晚 1～2 秒，所以多往前一點
+  const t = Number(b.dataset.t) - 2 - state.lead;
+  if (state.fightId !== fightId) await selectFight(fightId, { seek: false });
+  seekFightT(t);
+});
 
 // ---------- 時間軸 ----------
 // 使用者自己填的 GCD 秒數，依職業分別記住（裝備不同 GCD 就不同）；沒填回傳 null（自動推算）
@@ -932,6 +1046,7 @@ $('gcdInput').addEventListener('change', () => {
 $('jobSel').addEventListener('change', () => {
   state.job = $('jobSel').value;
   fillGcdInput();
+  if (!$('funPanel').hidden) renderFun();
   lsSet('job', state.job);
   if (state.videoId) lsSet('job:' + state.videoId, state.job);
   if (state.fight) loadFightData();
