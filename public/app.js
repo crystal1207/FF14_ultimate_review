@@ -782,6 +782,11 @@ function renderGcdSummary(ga) {
   const parts = [ga.manual ? `GCD ${ga.gcd.toFixed(2)} 秒（自己填的）` : `GCD 約 ${ga.gcd.toFixed(2)} 秒（推算）`, `共 ${ga.count} 個 GCD`];
   parts.push(ga.idleCount ? `空轉 ${ga.idleCount} 次、合計 ${ga.idleTotal.toFixed(1)} 秒` : '沒有空轉');
   if (ga.stops) parts.push(`停手 ${ga.stops} 次（轉場等，不算空轉）`);
+  const pos = state.data.casts.filter((c) => c.positional);
+  if (pos.length) {
+    const hit = pos.filter((c) => c.positional.ok).length;
+    parts.push(`身位 ${hit}/${pos.length}（${Math.round((hit / pos.length) * 100)}%）`);
+  }
   el.textContent = parts.join(' · ');
   el.classList.toggle('warn', ga.idleTotal >= 3);
 }
@@ -794,7 +799,21 @@ function iconHtml(c) {
 const KIND_LABEL = { gcd: 'GCD', ogcd: 'oGCD', pet: '寵物', item: '藥品', other: '' };
 function tip(c, kindLabel) {
   const cast = c.castStart != null && !c.cancelled && c.t > c.castStart ? `（讀條 ${(c.t - c.castStart).toFixed(1)} 秒）` : '';
-  return `${fmtDur(c.t, true)}  ${c.name}${c.detail ? `（${c.detail}）` : ''}  ${kindLabel}${cast}${c.cancelled ? '  ※讀條取消或被打斷' : ''}`;
+  return `${fmtDur(c.t, true)}  ${c.name}${c.detail ? `（${c.detail}）` : ''}  ${kindLabel}${cast}${c.cancelled ? '  ※讀條取消或被打斷' : ''}${posText(c.positional)}`;
+}
+const ZONE_LABEL = { rear: '背面', flank: '側面', front: '正面' };
+function posText(p) {
+  if (!p) return '';
+  const res = p.ok ? '✔ 有打到' : '✘ 沒打到';
+  const how = p.how === 'tn' ? '（開了真北）' : p.how === 'guess' ? '（依站位推測）' : '';
+  const where = p.zone ? `，當時站在${ZONE_LABEL[p.zone]}` : '';
+  return `
+身位（${ZONE_LABEL[p.need]}）：${res}${how}${where}`;
+}
+function posMark(c) {
+  const p = c.positional;
+  if (!p || state.px < 9) return '';
+  return `<span class="pos-mark ${p.ok ? 'ok' : 'miss'}${p.how === 'guess' ? ' guess' : ''}">${p.ok ? '✔' : '✘'}</span>`;
 }
 // 依序把元素分到不重疊的列，回傳列號
 function assignRows(items, startOf, endOf, maxRows) {
@@ -861,7 +880,7 @@ function renderTimeline() {
       gh += `<div class="cast-bar" style="left:${X(c.castStart)}px;width:${(c.t - c.castStart) * px}px"></div>`;
     }
     const half = px < 9 ? 1 : 12;
-    gh += `<div class="ev${c.cancelled ? ' cancelled' : ''}" data-t="${c.t}" style="left:${X(c.t) - half}px;top:4px" title="${esc(tip(c, KIND_LABEL[c.kind]))}">${iconHtml(c)}</div>`;
+    gh += `<div class="ev${c.cancelled ? ' cancelled' : ''}" data-t="${c.t}" style="left:${X(c.t) - half}px;top:4px" title="${esc(tip(c, KIND_LABEL[c.kind]))}">${iconHtml(c)}${posMark(c)}</div>`;
   }
   parts.push(`<div class="lane gcd">${gh}</div>`);
 

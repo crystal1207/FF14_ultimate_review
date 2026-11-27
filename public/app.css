@@ -237,6 +237,11 @@ dialog td:first-child { color: var(--accent); white-space: nowrap; }
 .gap.stop span, .gap.dead span { color: #ccc; font-weight: 400; }
 .lg.idle { background: var(--death); border-radius: 2px; }
 .gcd-summary { color: var(--muted); }
+/* 身位：GCD 圖示右下角的 ✔／✘ */
+.pos-mark { position: absolute; right: -4px; bottom: -4px; width: 13px; height: 13px; border-radius: 50%; font-size: 9px; line-height: 13px; text-align: center; font-weight: 800; color: #fff; pointer-events: none; box-shadow: 0 0 0 1.5px var(--bg, #111); }
+.pos-mark.ok { background: #2f9e5a; }
+.pos-mark.miss { background: #e0473a; }
+.pos-mark.guess { opacity: 0.7; }
 .gcd-summary.warn { color: #ff9b8a; }
 .gcd-input { width: 64px; text-align: right; }
 .range-hint { margin: 0; color: var(--muted); line-height: 1.5; }
@@ -270,3 +275,7 @@ dialog td:first-child { color: var(--accent); white-space: nowrap; }
 .fun-other .person { margin-bottom: 8px; }
 .fun-other .person > b.me { color: #ff9b8a; }
 .fun-note { margin: 2px 0 6px; text-align: center; color: #e8c25a; font-size: 13px; }
+.lg-pos { display: inline-flex; align-items: center; gap: 2px; }
+.lg-pos b { width: 12px; height: 12px; border-radius: 50%; font-size: 8px; line-height: 12px; text-align: center; color: #fff; }
+.lg-pos b.ok { background: #2f9e5a; }
+.lg-pos b.miss { background: #e0473a; }

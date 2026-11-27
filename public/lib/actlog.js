@@ -1,3 +1,4 @@
+import { POSITIONAL, zoneOf } from './positional.js?v=dev';
 // 解析 ACT／IINACT 的 Network_*.log（FFXIV 網路紀錄），切出每一把並整理事件。
 // 格式參考 cactbot 的 LogGuide：每行以 | 分隔，第 0 欄是類型，第 1 欄是含時區的時間戳。
 // 不依賴瀏覽器或 Node 的 API：createParser() 逐行餵入，瀏覽器（Web Worker）和 Node 都能用。
@@ -55,6 +56,8 @@ export function createParser({ title = 'log' } = {}) {
   const doomExpired = new Map(); // 玩家 id -> 死亡宣告時間到的時間
   const pos = new Map(); // 玩家 id -> { x, y } 最新座標（判斷撞到場地邊界用）
   const lastDot = new Map(); // 玩家 id -> 最後一次被持續傷害（DoT）打到的時間
+  const trueNorth = new Set(); // 開著真北的玩家
+  const posStats = {}; // 身位技：技能 ID -> 加成數值 -> { n, ok }（之後用來學哪些數值代表打到身位）
 
   const isFriendlySource = (id) => {
     if (isPlayer(id)) return true;
@@ -159,7 +162,24 @@ export function createParser({ title = 'log' } = {}) {
     return r >= 17 && r <= 30;
   }
 
-  function addCast(list, ts, src, f, castInfo) {
+  // 身位技打在敵人身上：記下加成數值、玩家相對於目標面向的位置、有沒有開真北
+  function readPositional(f, src, id) {
+    const need = POSITIONAL[id];
+    if (!need || !isPlayer(src) || !isEnemy(f[6])) return undefined;
+    const fl = f[8] || '';
+    if (fl.slice(-2) !== '03') return undefined; // 不是傷害（例如被閃避）
+    const bonus = fl.length > 6 ? parseInt(fl.slice(0, fl.length - 6), 16) : 0;
+    const zone = zoneOf(Number(f[30]), Number(f[31]), Number(f[33]), Number(f[40]), Number(f[41]));
+    const tn = trueNorth.has(src);
+    if (zone || tn) {
+      const s = ((posStats[id] ||= {})[bonus] ||= { n: 0, ok: 0 });
+      s.n++;
+      if (tn || zone === need) s.ok++;
+    }
+    return { id, bonus, zone, tn };
+  }
+
+  function addCast(list, ts, src, f, castInfo, positional) {
     const owner = actors[src]?.owner;
     list.push({
       ts,
@@ -168,6 +188,7 @@ export function createParser({ title = 'log' } = {}) {
       id: parseInt(f[4], 16),
       name: f[5] || '',
       castStart: castInfo ? castInfo.ts : undefined,
+      positional,
     });
   }
 
@@ -289,7 +310,7 @@ export function createParser({ title = 'log' } = {}) {
         casting.delete(key);
 
         if (friendly) {
-          addCast(pull ? pull.friendly : recentFriendly, ts, src, f, castInfo);
+          addCast(pull ? pull.friendly : recentFriendly, ts, src, f, castInfo, readPositional(f, src, abilityId));
           if (!pull && recentFriendly.length > 200) recentFriendly.splice(0, 100);
         } else if (enemy && pull) {
           if (/^unknown_/i.test(f[5])) break;
@@ -336,6 +357,7 @@ export function createParser({ title = 'log' } = {}) {
         // 獲得狀態：26|時間|狀態ID|名稱|秒數|來源ID|來源|目標ID|目標|層數
         const name = f[3];
         const tgt = f[7];
+        if (f[2] === '4E2') trueNorth.add(tgt); // 真北
         if (!isPlayer(tgt) || !(VULN_NAMES.has(name) || DOOM_NAMES.has(name))) break;
         let m = statuses.get(tgt);
         if (!m) statuses.set(tgt, (m = new Map()));
@@ -344,6 +366,7 @@ export function createParser({ title = 'log' } = {}) {
       }
       case '30': {
         // 失去狀態：死亡宣告在預定時間結束 ＝ 時間到（之後就會死）
+        if (f[2] === '4E2') trueNorth.delete(f[7]);
         const m = statuses.get(f[7]);
         const s = m?.get(f[3]);
         if (!s) break;
@@ -367,6 +390,7 @@ export function createParser({ title = 'log' } = {}) {
       startTime: firstTs ?? 0,
       endTime: lastTs ?? 0,
       me,
+      posStats,
       fights: fights.map((x, i) => ({ id: i + 1, ...x })),
     };
   }

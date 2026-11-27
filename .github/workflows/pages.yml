@@ -24,8 +24,8 @@ jobs:
       - name: Stamp asset version
         run: |
           V="${GITHUB_SHA::7}"
-          sed -i "s/?v=dev/?v=$V/g" public/index.html public/app.js public/parser-worker.js
-          grep -c "?v=$V" public/index.html public/app.js public/parser-worker.js
+          sed -i "s/?v=dev/?v=$V/g" public/index.html public/app.js public/parser-worker.js public/lib/actlog.js
+          grep -c "?v=$V" public/index.html public/app.js public/parser-worker.js public/lib/actlog.js
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public

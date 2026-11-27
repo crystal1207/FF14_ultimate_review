@@ -1,7 +1,9 @@
 // 在背景執行緒解析 log，避免大檔案讓畫面卡住。解析結果留在這裡，主畫面需要哪一把再來拿。
 import { createParser, lineSplitter } from './lib/actlog.js?v=dev';
+import { learn, judge } from './lib/positional.js?v=dev';
 
 let report = null;
+let posTable = null; // 這份 log 學到的身位判定表
 
 async function parse(file) {
   const parser = createParser({ title: file.name });
@@ -19,6 +21,7 @@ async function parse(file) {
   }
   split.end();
   report = parser.finish();
+  posTable = learn(report.posStats);
   return summary(report);
 }
 
@@ -56,6 +59,7 @@ function fight(fightId, playerId) {
     cancelled: c.cancelled || undefined,
     name: c.name,
     pet: c.src !== playerId || undefined,
+    positional: c.positional ? judge(posTable, c.positional) || undefined : undefined,
   });
   return {
     fightId,
